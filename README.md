@@ -1,3 +1,5 @@
+![demo frames](demo_frames.png)
+
 # Tactile-Enhanced Robotic Manipulation
 
 A reinforcement learning project demonstrating how simulated tactile feedback enhances robotic manipulation for humanoid robotics applications. This project augments the RoboMimic dataset with simulated tactile sensors to improve sample efficiency and manipulation performance.
