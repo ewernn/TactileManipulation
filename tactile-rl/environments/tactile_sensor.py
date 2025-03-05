@@ -1,301 +1,397 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import mujoco
 
 class TactileSensor:
     """
-    Simulated tactile sensor for robotic gripper.
-    Implements a grid of taxels on each finger surface.
+    Tactile sensor implementation for a two-finger gripper.
+    Simulates a grid of taxels that can detect normal and tangential forces.
     """
     
-    def __init__(self, n_taxels_x=10, n_taxels_y=10, finger_pad_size=(0.016, 0.016), noise_level=0.01):
+    def __init__(self, model=None, data=None, n_taxels_x=10, n_taxels_y=10, 
+                 finger_pad_size=(0.016, 0.016), noise_level=0.01):
         """
-        Initialize a tactile sensor with a grid of taxels on each finger.
+        Initialize the tactile sensor.
         
         Args:
+            model: MuJoCo model (optional)
+            data: MuJoCo data (optional)
             n_taxels_x: Number of taxels in the x direction
             n_taxels_y: Number of taxels in the y direction
             finger_pad_size: Size of the finger pad in meters (width, height)
-            noise_level: Standard deviation of the Gaussian noise to add to the readings
+            noise_level: Level of noise to add to the readings (fraction of reading)
         """
         self.n_taxels_x = n_taxels_x
         self.n_taxels_y = n_taxels_y
-        self.finger_pad_size = finger_pad_size
+        self.pad_width, self.pad_height = finger_pad_size
         self.noise_level = noise_level
         
-        # For the Panda gripper, the finger pads are defined as 0.016 x 0.016 m boxes
-        # (based on the 0.008 half-size in the model)
-        self.pad_width = finger_pad_size[0]  # x dimension
-        self.pad_height = finger_pad_size[1]  # z dimension
+        # Finger pad center offsets from finger body center
+        # These depend on the specific robot model being used
+        self.finger_pad_offsets = {
+            "left": np.array([0.0, 0.004, 0.0]),   # Offset from left finger body to pad center
+            "right": np.array([0.0, -0.004, 0.0])  # Offset from right finger body to pad center
+        }
         
-        # Calculate taxel positions for both fingers
+        # Store model and data for later use
+        self.model = model
+        self.data = data
+        
+        # Find the finger body IDs if model is provided
+        if model is not None:
+            self.finger_ids = self._find_finger_ids(model)
+        else:
+            self.finger_ids = {"left": None, "right": None}
+        
+        # Initialize taxel positions and readings
+        # Each taxel reading has 3 components: [normal_force, tangential_force_x, tangential_force_z]
         self.left_taxel_positions = self._compute_taxel_positions("left")
         self.right_taxel_positions = self._compute_taxel_positions("right")
         
-        # Initialize readings for both fingers
-        self.left_readings = np.zeros((n_taxels_x, n_taxels_y, 3))  # Force readings (normal, tangential_x, tangential_y)
-        self.right_readings = np.zeros((n_taxels_x, n_taxels_y, 3))
+        # Initialize empty readings arrays
+        self.left_readings = np.zeros((self.n_taxels_x, self.n_taxels_y, 3))
+        self.right_readings = np.zeros((self.n_taxels_x, self.n_taxels_y, 3))
+    
+    def _find_finger_ids(self, model):
+        """Find the body IDs for the left and right fingers in the MuJoCo model."""
+        finger_ids = {"left": None, "right": None}
+        
+        # Search for finger bodies in the model
+        for i in range(model.nbody):
+            body_name = model.body(i).name
+            
+            if "finger" in body_name.lower() or "pad" in body_name.lower():
+                if "left" in body_name.lower() or "finger1" in body_name.lower() or "panda_leftfinger" in body_name.lower():
+                    finger_ids["left"] = i
+                elif "right" in body_name.lower() or "finger2" in body_name.lower() or "panda_rightfinger" in body_name.lower():
+                    finger_ids["right"] = i
+        
+        print(f"Found finger IDs: {finger_ids}")
+        return finger_ids
     
     def _compute_taxel_positions(self, finger):
         """
-        Compute the positions of taxels on a finger pad.
+        Compute the positions of taxels in the local coordinate frame of the finger.
         
         Args:
-            finger: "left" or "right"
+            finger: "left" or "right" to specify which finger
             
         Returns:
-            Array of shape (n_taxels_x, n_taxels_y, 3) with the (x, y, z) coordinates
-            of each taxel in the finger's local coordinate frame.
+            Array of shape (n_taxels_x, n_taxels_y, 3) containing the 3D positions of each taxel
         """
-        # Create a grid of taxels
+        # Create a grid of taxel positions
         x_positions = np.linspace(-self.pad_width/2, self.pad_width/2, self.n_taxels_x)
-        y_positions = np.linspace(-self.pad_height/2, self.pad_height/2, self.n_taxels_y)
+        z_positions = np.linspace(-self.pad_height/2, self.pad_height/2, self.n_taxels_y)
         
-        # Create meshgrid
-        xx, yy = np.meshgrid(x_positions, y_positions)
+        # Create a meshgrid of positions
+        x_grid, z_grid = np.meshgrid(x_positions, z_positions)
         
-        # Initialize positions array
-        positions = np.zeros((self.n_taxels_x, self.n_taxels_y, 3))
+        # Y position is fixed (the surface of the pad)
+        y_offset = self.finger_pad_offsets[finger][1]
         
-        # Set x and z coordinates based on the meshgrid (y is constant at the surface)
-        positions[:, :, 0] = xx  # x coordinate
+        # Create the array of taxel positions
+        taxel_positions = np.zeros((self.n_taxels_x, self.n_taxels_y, 3))
+        taxel_positions[:, :, 0] = x_grid.T  # x position
+        taxel_positions[:, :, 1] = y_offset  # y position is fixed at the finger pad surface
+        taxel_positions[:, :, 2] = z_grid.T  # z position
         
-        # Y coordinate is the surface of the pad
-        if finger == "left":
-            positions[:, :, 1] = -0.004  # y coordinate (pad thickness is 0.008, so half is 0.004)
-        else:  # right finger
-            positions[:, :, 1] = 0.004
-            
-        positions[:, :, 2] = yy  # z coordinate
-        
-        return positions
+        return taxel_positions
     
-    def process_contacts(self, sim):
+    def process_contacts(self, model, data):
         """
-        Process contact information from a MuJoCo simulation step.
+        Process contacts from MuJoCo simulation data.
         
         Args:
-            sim: A MuJoCo simulation object after step() has been called
+            model: MuJoCo model
+            data: MuJoCo data
             
         Returns:
-            Updated left and right finger tactile readings
+            List of dictionaries containing contact information
         """
         # Reset readings
-        self.left_readings = np.zeros((self.n_taxels_x, self.n_taxels_y, 3))
-        self.right_readings = np.zeros((self.n_taxels_x, self.n_taxels_y, 3))
+        self.left_readings.fill(0.0)
+        self.right_readings.fill(0.0)
         
-        # Get contact information
-        for i in range(sim.data.ncon):
-            contact = sim.data.contact[i]
+        contact_info = []
+        
+        # Process contacts if we have finger IDs
+        if self.finger_ids["left"] is None or self.finger_ids["right"] is None:
+            print("Warning: Finger IDs not found. Cannot process contacts.")
+            return contact_info
+        
+        # Iterate through contacts
+        for i in range(data.ncon):
+            contact = data.contact[i]
             
-            # Check if contact involves the finger pads
-            geom1_name = sim.model.geom_id2name(contact.geom1)
-            geom2_name = sim.model.geom_id2name(contact.geom2)
-            
-            # Determine which finger is in contact (if any)
-            if geom1_name == "finger1_pad_collision" or geom2_name == "finger1_pad_collision":
-                finger = "left"
-                geom_id = contact.geom1 if geom1_name == "finger1_pad_collision" else contact.geom2
-            elif geom1_name == "finger2_pad_collision" or geom2_name == "finger2_pad_collision":
-                finger = "right"
-                geom_id = contact.geom1 if geom1_name == "finger2_pad_collision" else contact.geom2
-            else:
-                continue  # Contact doesn't involve finger pads
-            
-            # Get contact position in world frame
-            contact_pos = np.array(contact.pos)
+            # Skip inactive contacts
+            if model.geom(contact.geom1).contype == 0 or model.geom(contact.geom2).contype == 0:
+                continue
             
             # Get contact force in world frame
-            contact_force = np.zeros(6)
-            sim.data.get_contact_force(i, contact_force)
-            force = contact_force[:3]  # Just get the force vector
+            force = np.zeros(6, dtype=np.float64)
+            mujoco.mj_contactForce(model, data, i, force)
+            force_norm = np.linalg.norm(force[:3])
             
-            # Transform the contact position to the local coordinate frame of the finger pad
-            local_pos = self._world_to_local(contact_pos, sim, finger)
+            # Skip low forces
+            if force_norm < 0.01:
+                continue
             
-            # Transform the contact force to the local coordinate frame
-            local_force = self._world_to_local_force(force, sim, finger)
+            # Check which bodies are involved in the contact
+            body1 = model.geom(contact.geom1).bodyid
+            body2 = model.geom(contact.geom2).bodyid
             
-            # Distribute the force to the surrounding taxels
-            self._distribute_force(local_pos, local_force, finger)
+            # Find if contact involves left or right finger
+            finger = None
+            if body1 == self.finger_ids["left"] or body2 == self.finger_ids["left"]:
+                finger = "left"
+            elif body1 == self.finger_ids["right"] or body2 == self.finger_ids["right"]:
+                finger = "right"
+            
+            if finger is None:
+                continue
+            
+            # Get contact position in world frame
+            pos_world = contact.pos.copy()
+            
+            # Get contact force in world frame
+            force_world = force[:3].copy()
+            
+            # Transform to local frame
+            pos_local = self._world_to_local(pos_world, model, data, finger)
+            force_local = self._world_to_local_force(force_world, model, data, finger)
+            
+            # Distribute force to nearby taxels
+            self._distribute_force(pos_local, force_local, finger)
+            
+            # Store contact information
+            contact_info.append({
+                "finger": finger,
+                "pos": pos_world,
+                "pos_local": pos_local,
+                "force": force_world,
+                "force_local": force_local,
+                "force_norm": force_norm,
+                "body_name": model.body(self.finger_ids[finger]).name
+            })
         
         # Add noise to readings
         self._add_noise()
         
-        return self.left_readings, self.right_readings
+        return contact_info
     
-    def _world_to_local(self, pos_world, sim, finger):
+    def _world_to_local(self, pos_world, model, data, finger):
         """
-        Transform a position from world coordinates to the local finger pad coordinates.
+        Transform a position from world frame to finger's local frame.
         
         Args:
-            pos_world: Position in world coordinates
-            sim: MuJoCo simulation object
-            finger: "left" or "right"
+            pos_world: Position in world frame (x,y,z)
+            model: MuJoCo model
+            data: MuJoCo data
+            finger: "left" or "right" to specify which finger
             
         Returns:
-            Position in local finger pad coordinates
+            Position in finger's local frame
         """
-        # This is a simplified transformation - in a real implementation, we would
-        # use the actual transformation matrix from MuJoCo
+        # Get the finger body ID
+        finger_id = self.finger_ids[finger]
         
-        # Get the body ID for the finger tip
-        if finger == "left":
-            body_id = sim.model.body_name2id("finger_joint1_tip")
-        else:
-            body_id = sim.model.body_name2id("finger_joint2_tip")
+        # Get the body's position and orientation
+        body_pos = data.xpos[finger_id]
+        body_mat = data.xmat[finger_id].reshape(3, 3)
         
-        # Get the position and orientation of the body
-        body_pos = sim.data.body_xpos[body_id]
-        body_mat = sim.data.body_xmat[body_id].reshape(3, 3)
+        # Transform position to local frame
+        pos_local = np.matmul(body_mat.T, pos_world - body_pos)
         
-        # Transform from world to body coordinates
-        pos_body = body_mat.T @ (pos_world - body_pos)
+        # Adjust for the finger pad offset
+        pos_local = pos_local - self.finger_pad_offsets[finger]
         
-        # Transform from body to pad coordinates
-        # According to the XML, the pad is offset from the finger tip
-        if finger == "left":
-            pad_offset = np.array([0, -0.005, -0.015])
-        else:
-            pad_offset = np.array([0, 0.005, -0.015])
-        
-        pos_pad = pos_body - pad_offset
-        
-        return pos_pad
+        return pos_local
     
-    def _world_to_local_force(self, force_world, sim, finger):
+    def _world_to_local_force(self, force_world, model, data, finger):
         """
-        Transform a force vector from world coordinates to the local finger pad coordinates.
+        Transform a force vector from world frame to finger's local frame.
         
         Args:
-            force_world: Force vector in world coordinates
-            sim: MuJoCo simulation object
-            finger: "left" or "right"
+            force_world: Force in world frame (x,y,z)
+            model: MuJoCo model
+            data: MuJoCo data
+            finger: "left" or "right" to specify which finger
             
         Returns:
-            Force vector in local finger pad coordinates
+            Force in finger's local frame
         """
-        # Get the body ID for the finger tip
-        if finger == "left":
-            body_id = sim.model.body_name2id("finger_joint1_tip")
-        else:
-            body_id = sim.model.body_name2id("finger_joint2_tip")
+        # Get the finger body ID
+        finger_id = self.finger_ids[finger]
         
-        # Get the orientation of the body
-        body_mat = sim.data.body_xmat[body_id].reshape(3, 3)
+        # Get the body's orientation
+        body_mat = data.xmat[finger_id].reshape(3, 3)
         
-        # Transform the force from world to body coordinates
-        force_local = body_mat.T @ force_world
+        # Transform force to local frame (only rotation, no translation)
+        force_local = np.matmul(body_mat.T, force_world)
         
         return force_local
     
     def _distribute_force(self, contact_pos, contact_force, finger):
         """
-        Distribute the contact force to the surrounding taxels.
+        Distribute a contact force to nearby taxels.
         
         Args:
-            contact_pos: Contact position in local finger pad coordinates
-            contact_force: Contact force in local finger pad coordinates
-            finger: "left" or "right"
+            contact_pos: Contact position in local frame
+            contact_force: Contact force in local frame
+            finger: "left" or "right" to specify which finger
         """
-        # Simple force distribution model: distribute the force to the 4 surrounding taxels
-        # based on the distance to each taxel
-        
-        # Find the closest taxels
+        # Get the appropriate array of taxel positions and readings
         if finger == "left":
-            positions = self.left_taxel_positions
+            taxel_positions = self.left_taxel_positions
             readings = self.left_readings
         else:
-            positions = self.right_taxel_positions
+            taxel_positions = self.right_taxel_positions
             readings = self.right_readings
         
-        # Calculate distances to all taxels
-        distances = np.sqrt(
-            (positions[:, :, 0] - contact_pos[0])**2 + 
-            (positions[:, :, 2] - contact_pos[2])**2
-        )
-        
-        # Use Gaussian weighting for force distribution
-        sigma = 0.005  # Gaussian width parameter (5mm)
-        weights = np.exp(-distances**2 / (2 * sigma**2))
-        weights = weights / np.sum(weights)  # Normalize
-        
-        # Normal force is in the y direction (perpendicular to the pad surface)
-        normal_force = np.abs(contact_force[1])  # Take absolute value
-        
-        # Tangential forces are in the x and z directions
-        tangential_x = contact_force[0]
-        tangential_z = contact_force[2]
-        
-        # Distribute forces to all taxels according to weights
+        # Calculate distance from contact point to each taxel
+        distances = np.zeros((self.n_taxels_x, self.n_taxels_y))
         for i in range(self.n_taxels_x):
             for j in range(self.n_taxels_y):
-                if finger == "left":
-                    self.left_readings[i, j, 0] += weights[i, j] * normal_force
-                    self.left_readings[i, j, 1] += weights[i, j] * tangential_x
-                    self.left_readings[i, j, 2] += weights[i, j] * tangential_z
-                else:
-                    self.right_readings[i, j, 0] += weights[i, j] * normal_force
-                    self.right_readings[i, j, 1] += weights[i, j] * tangential_x
-                    self.right_readings[i, j, 2] += weights[i, j] * tangential_z
+                taxel_pos = taxel_positions[i, j]
+                # Only consider distance in x-z plane (along the pad surface)
+                dx = taxel_pos[0] - contact_pos[0]
+                dz = taxel_pos[2] - contact_pos[2]
+                distances[i, j] = np.sqrt(dx**2 + dz**2)
+        
+        # Force distribution function (Gaussian)
+        sigma = 0.003  # Standard deviation in meters
+        distribution = np.exp(-0.5 * (distances / sigma)**2)
+        
+        # Normalize distribution
+        if np.sum(distribution) > 0:
+            distribution = distribution / np.sum(distribution)
+        
+        # Distribute forces to taxels
+        for i in range(self.n_taxels_x):
+            for j in range(self.n_taxels_y):
+                # Normal force (y-component in local frame)
+                readings[i, j, 0] += distribution[i, j] * abs(contact_force[1])
+                
+                # Tangential forces (x and z components in local frame)
+                readings[i, j, 1] += distribution[i, j] * contact_force[0]
+                readings[i, j, 2] += distribution[i, j] * contact_force[2]
     
     def _add_noise(self):
-        """Add Gaussian noise to the sensor readings."""
-        self.left_readings += np.random.normal(0, self.noise_level, self.left_readings.shape)
-        self.right_readings += np.random.normal(0, self.noise_level, self.right_readings.shape)
+        """Add Gaussian noise to the readings."""
+        # Add noise to left readings
+        noise = np.random.normal(0, self.noise_level, self.left_readings.shape)
+        self.left_readings += noise * self.left_readings
+        
+        # Add noise to right readings
+        noise = np.random.normal(0, self.noise_level, self.right_readings.shape)
+        self.right_readings += noise * self.right_readings
+    
+    def get_readings(self, model=None, data=None):
+        """
+        Get the current tactile readings.
+        
+        Args:
+            model: MuJoCo model (optional, will use stored model if not provided)
+            data: MuJoCo data (optional, will use stored data if not provided)
+            
+        Returns:
+            Tuple of (left_readings, right_readings)
+        """
+        if model is not None and data is not None:
+            self.process_contacts(model, data)
+        
+        return self.left_readings, self.right_readings
+    
+    def visualize_reading(self, reading, ax=None, title=None):
+        """
+        Visualize a single tactile reading (either left or right).
+        
+        Args:
+            reading: The tactile reading to visualize (n_taxels_x, n_taxels_y, 3)
+            ax: Matplotlib axis to plot on (optional)
+            title: Title for the plot (optional)
+            
+        Returns:
+            Matplotlib axis
+        """
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(6, 6))
+        
+        # Extract normal forces (component 0)
+        normal_forces = reading[:, :, 0]
+        
+        # Create colormap for visualization
+        cmap = plt.cm.plasma
+        vmax = np.max(normal_forces) if np.max(normal_forces) > 0 else 1.0
+        
+        # Plot the normal forces as a heatmap
+        im = ax.imshow(normal_forces.T, cmap=cmap, origin='lower', vmax=vmax)
+        
+        # Add colorbar
+        plt.colorbar(im, ax=ax, label='Normal Force (N)')
+        
+        # Draw tangential forces as arrows
+        if normal_forces.max() > 0.1:  # Only draw arrows if there's significant contact
+            for i in range(self.n_taxels_x):
+                for j in range(self.n_taxels_y):
+                    if normal_forces[i, j] > 0.1 * normal_forces.max():
+                        # Scale arrow by tangential force
+                        tx = reading[i, j, 1]
+                        tz = reading[i, j, 2]
+                        
+                        # Normalize and scale
+                        tangential_mag = np.sqrt(tx**2 + tz**2)
+                        if tangential_mag > 0.01:
+                            scale = min(0.4, tangential_mag / normal_forces.max())
+                            ax.arrow(i, j, scale * tx / tangential_mag, scale * tz / tangential_mag,
+                                    head_width=0.1, head_length=0.2, fc='white', ec='white')
+        
+        # Set labels and title
+        ax.set_xlabel('X Taxel Index')
+        ax.set_ylabel('Z Taxel Index')
+        if title:
+            ax.set_title(title)
+        
+        return ax
     
     def visualize_readings(self, readings_type="normal"):
         """
-        Visualize the tactile sensor readings.
+        Visualize tactile readings for both fingers.
         
         Args:
-            readings_type: Type of readings to visualize
-                "normal" - normal force
-                "tangential" - tangential force magnitude
-                "tangential_x" - tangential force in x direction
-                "tangential_y" - tangential force in y direction
+            readings_type: Type of readings to visualize ("normal", "tangential_x", "tangential_z")
+            
+        Returns:
+            Matplotlib figure
         """
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
         
-        # Select the appropriate readings
-        if readings_type == "normal":
-            left_data = self.left_readings[:, :, 0]
-            right_data = self.right_readings[:, :, 0]
-            title = "Normal Force"
-        elif readings_type == "tangential":
-            left_data = np.sqrt(self.left_readings[:, :, 1]**2 + self.left_readings[:, :, 2]**2)
-            right_data = np.sqrt(self.right_readings[:, :, 1]**2 + self.right_readings[:, :, 2]**2)
-            title = "Tangential Force Magnitude"
-        elif readings_type == "tangential_x":
-            left_data = self.left_readings[:, :, 1]
-            right_data = self.right_readings[:, :, 1]
-            title = "Tangential Force (X)"
-        elif readings_type == "tangential_y":
-            left_data = self.left_readings[:, :, 2]
-            right_data = self.right_readings[:, :, 2]
-            title = "Tangential Force (Y)"
+        # Select the component to visualize
+        component = 0  # Normal force by default
+        if readings_type == "tangential_x":
+            component = 1
+        elif readings_type == "tangential_z":
+            component = 2
         
-        # Plot
-        vmax = max(np.max(left_data), np.max(right_data))
-        vmin = 0 if readings_type == "normal" or readings_type == "tangential" else -vmax
+        # Left finger
+        left_data = self.left_readings[:, :, component]
+        im_left = axes[0].imshow(left_data.T, cmap=plt.cm.plasma, origin='lower')
+        axes[0].set_title("Left Finger")
+        axes[0].set_xlabel("X Taxel Index")
+        axes[0].set_ylabel("Z Taxel Index")
+        plt.colorbar(im_left, ax=axes[0])
         
-        im1 = ax1.imshow(left_data, cmap="viridis", vmin=vmin, vmax=vmax)
-        ax1.set_title(f"Left Finger {title}")
-        ax1.set_xlabel("Taxel X")
-        ax1.set_ylabel("Taxel Y")
+        # Right finger
+        right_data = self.right_readings[:, :, component]
+        im_right = axes[1].imshow(right_data.T, cmap=plt.cm.plasma, origin='lower')
+        axes[1].set_title("Right Finger")
+        axes[1].set_xlabel("X Taxel Index")
+        plt.colorbar(im_right, ax=axes[1])
         
-        im2 = ax2.imshow(right_data, cmap="viridis", vmin=vmin, vmax=vmax)
-        ax2.set_title(f"Right Finger {title}")
-        ax2.set_xlabel("Taxel X")
-        ax2.set_ylabel("Taxel Y")
-        
-        # Add colorbars
-        divider1 = make_axes_locatable(ax1)
-        divider2 = make_axes_locatable(ax2)
-        cax1 = divider1.append_axes("right", size="5%", pad=0.05)
-        cax2 = divider2.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im1, cax=cax1)
-        plt.colorbar(im2, cax=cax2)
+        # Add title
+        component_names = ["Normal Force", "Tangential Force X", "Tangential Force Z"]
+        plt.suptitle(f"Tactile Readings: {component_names[component]}")
         
         plt.tight_layout()
         return fig
