@@ -2,6 +2,7 @@ import argparse
 import h5py
 import numpy as np
 import os
+import sys
 import time
 import mujoco
 from mujoco import viewer
@@ -10,11 +11,47 @@ import matplotlib
 # Force matplotlib to use a non-interactive backend that doesn't require a GUI window
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+script_dir = os.path.dirname(os.path.abspath(__file__))  # scripts/
+parent_dir = os.path.dirname(script_dir)  # tactile-rl/
+sys.path.insert(0, parent_dir)
 from environments.tactile_sensor import TactileSensor
 
-def replay_with_contact(dataset_path, demo_idx=0, render=True, save_video=False, model_xml_path=None, output_dir=None, camera_id=None, playback_speed=0.01):
+def parse_object_data(object_obs):
     """
-    Replay a demonstration with contact detection.
+    Parse the 23-value object observation into meaningful components.
+    
+    The structure is:
+    - cubeA position (3 values)
+    - cubeA quaternion (4 values)
+    - cubeB position (3 values)
+    - cubeB quaternion (4 values)
+    - cubeA to cubeB vector (3 values)
+    - gripper to cubeA vector (3 values)
+    - gripper to cubeB vector (3 values)
+    
+    Args:
+        object_obs: Array of 23 values containing object information
+        
+    Returns:
+        Tuple of (cubeA_pos, cubeA_quat, cubeB_pos, cubeB_quat)
+    """
+    cubeA_pos = object_obs[0:3]  # First 3 values are cubeA position
+    cubeA_quat = object_obs[3:7]  # Next 4 values are cubeA quaternion
+    
+    cubeB_pos = object_obs[7:10]  # Next 3 values are cubeB position
+    cubeB_quat = object_obs[10:14]  # Next 4 values are cubeB quaternion
+    
+    # The rest are the vectors (not needed for updating positions)
+    # cubeA_to_cubeB = object_obs[14:17]
+    # gripper_to_cubeA = object_obs[17:20]
+    # gripper_to_cubeB = object_obs[20:23]
+    
+    return cubeA_pos, cubeA_quat, cubeB_pos, cubeB_quat
+
+def replay_full_robot(dataset_path, demo_idx=0, render=True, save_video=False, model_xml_path=None, output_dir=None, camera_id=None, playback_speed=0.01):
+    """
+    Replay a demonstration with the full robot and contact detection.
     
     Args:
         dataset_path: Path to the HDF5 dataset
@@ -62,11 +99,26 @@ def replay_with_contact(dataset_path, demo_idx=0, render=True, save_video=False,
             
             initial_state = states[0]
             
-            # Extract information about the gripper for our tactile sensor
-            if 'obs' in demo_group and 'robot0_gripper_qpos' in demo_group['obs']:
-                gripper_qpos = demo_group['obs']['robot0_gripper_qpos'][:]
-                print(f"Gripper positions shape: {gripper_qpos.shape}")
+            # Extract information about the arm and gripper
+            if 'obs' in demo_group:
+                if 'robot0_joint_pos' in demo_group['obs']:
+                    joint_pos = demo_group['obs']['robot0_joint_pos'][:]
+                    print(f"Arm joint positions shape: {joint_pos.shape}")
                 
+                if 'robot0_gripper_qpos' in demo_group['obs']:
+                    gripper_qpos = demo_group['obs']['robot0_gripper_qpos'][:]
+                    print(f"Gripper positions shape: {gripper_qpos.shape}")
+                
+                # Check for object observations
+                if 'object' in demo_group['obs']:
+                    object_obs = demo_group['obs']['object'][:]
+                    print(f"Object observations shape: {object_obs.shape}")
+                    if object_obs.shape[1] != 23:
+                        print(f"Warning: Expected 23 values in object observations, but got {object_obs.shape[1]}")
+                else:
+                    print("Warning: No object observations found in dataset")
+                    object_obs = None
+            
             # Print some information about the demo
             print(f"Demo length: {len(actions)} steps")
             print(f"Action shape: {actions.shape}")
@@ -75,12 +127,9 @@ def replay_with_contact(dataset_path, demo_idx=0, render=True, save_video=False,
             # Check if the dataset has a model file attribute
             model_file = model_xml_path
             if model_file is None:
-                if 'model_file' in f.attrs:
-                    model_file = f.attrs['model_file']
-                    print(f"Using model file from dataset: {model_file}")
-                else:
-                    model_file = "assets/panda_gripper.xml"
-                    print(f"No model file specified, using default: {model_file}")
+                # Use our custom two-cube model instead of the default
+                model_file = "franka_emika_panda/mjx_two_cubes.xml"
+                print(f"Using two-cube model: {model_file}")
                     
     except Exception as e:
         print(f"Error loading dataset: {e}")
@@ -91,10 +140,10 @@ def replay_with_contact(dataset_path, demo_idx=0, render=True, save_video=False,
         # Try finding the model file in common locations
         possible_paths = [
             model_file,
-            os.path.join("assets", model_file),
-            os.path.join("..", "assets", model_file),
-            os.path.join("assets", "panda_gripper.xml"),
-            os.path.join("..", "assets", "panda_gripper.xml")
+            os.path.join("franka_emika_panda", "mjx_two_cubes.xml"),
+            os.path.join("..", "franka_emika_panda", "mjx_two_cubes.xml"),
+            os.path.join("franka_emika_panda", model_file),
+            os.path.join("..", "franka_emika_panda", model_file)
         ]
         
         for path in possible_paths:
@@ -111,24 +160,60 @@ def replay_with_contact(dataset_path, demo_idx=0, render=True, save_video=False,
         data = mujoco.MjData(model)
         print(f"Loaded MuJoCo model: {model_file}")
         
+        # Get body IDs for cubes
+        try:
+            cubeA_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "cubeA")
+            cubeB_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "cubeB")
+            print(f"Found cube bodies: cubeA (ID: {cubeA_body_id}), cubeB (ID: {cubeB_body_id})")
+            has_cubes = True
+        except Exception as e:
+            print(f"Warning: Could not find cube bodies: {e}")
+            has_cubes = False
+        
         # Initialize tactile sensor
-        tactile_sensor = TactileSensor(model=model, data=data)
+        tactile_sensor = TactileSensor(
+            model=model, 
+            data=data,
+            left_finger_name="left_finger",
+            right_finger_name="right_finger",
+            collision_geom_prefixes=["fingertip_pad_collision"]
+        )
         print("Initialized tactile sensor")
         
         # Set initial state
-        # Note: We're assuming initial_state can be directly mapped to data.qpos and data.qvel
-        # This may need adjustment based on the actual state structure
         try:
-            # Set initial joint positions (first part of state)
-            # For Panda, typically first 7 values are joint positions
-            joint_count = min(7, len(initial_state), model.nq)
-            data.qpos[:joint_count] = initial_state[:joint_count]
+            # Set initial arm joint positions (7 joints)
+            if 'obs' in demo_group and 'robot0_joint_pos' in demo_group['obs']:
+                arm_joint_pos = demo_group['obs']['robot0_joint_pos'][0]
+                data.qpos[:7] = arm_joint_pos
+                print("Set initial arm joint positions")
             
-            # Set initial gripper position if available
+            # Set initial gripper position (2 joints)
             if 'obs' in demo_group and 'robot0_gripper_qpos' in demo_group['obs']:
-                gripper_start = demo_group['obs']['robot0_gripper_qpos'][0]
-                # Assuming the last two values in qpos control the gripper
-                data.qpos[-2:] = gripper_start
+                gripper_pos = demo_group['obs']['robot0_gripper_qpos'][0]
+                data.qpos[7:9] = gripper_pos
+                print("Set initial gripper positions")
+            
+            # Set initial cube positions if object observations are available
+            if has_cubes and object_obs is not None:
+                cubeA_pos, cubeA_quat, cubeB_pos, cubeB_quat = parse_object_data(object_obs[0])
+                
+                # Set initial positions and orientations for cubes
+                # For cubeA - set position and orientation in the free joint's qpos
+                cube_A_joint_idx = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "cubeA_joint0")
+                if cube_A_joint_idx != -1:
+                    cube_A_qpos_start = model.jnt_qposadr[cube_A_joint_idx]
+                    data.qpos[cube_A_qpos_start:cube_A_qpos_start+3] = cubeA_pos
+                    data.qpos[cube_A_qpos_start+3:cube_A_qpos_start+7] = cubeA_quat
+                
+                # For cubeB - set position and orientation in the free joint's qpos
+                cube_B_joint_idx = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "cubeB_joint0")
+                if cube_B_joint_idx != -1:
+                    cube_B_qpos_start = model.jnt_qposadr[cube_B_joint_idx]
+                    data.qpos[cube_B_qpos_start:cube_B_qpos_start+3] = cubeB_pos
+                    data.qpos[cube_B_qpos_start+3:cube_B_qpos_start+7] = cubeB_quat
+                
+                print("Set initial cube positions and orientations")
             
             # Forward kinematics to update the model
             mujoco.mj_forward(model, data)
@@ -148,15 +233,23 @@ def replay_with_contact(dataset_path, demo_idx=0, render=True, save_video=False,
         try:
             viewer_instance = viewer.launch(model, data)
             
-            # Set camera view if specified
-            if camera_id is not None:
-                if isinstance(camera_id, int) and 0 <= camera_id < model.ncam:
-                    viewer_instance.cam.azimuth = model.cam_azimuth[camera_id]
-                    viewer_instance.cam.elevation = model.cam_elevation[camera_id]
-                    viewer_instance.cam.distance = model.cam_distance[camera_id]
-                    print(f"Using initial camera {camera_id}")
-                else:
-                    print(f"Invalid camera ID: {camera_id}")
+            # IMPORTANT: Add this line to make viewer non-blocking
+            viewer_instance.sync()  # Initial sync
+            
+            # Set camera view if needed
+            if camera_id is None:
+                viewer_instance.cam.azimuth = 90
+                viewer_instance.cam.elevation = -15
+                viewer_instance.cam.distance = 1.5
+                viewer_instance.cam.lookat = [0.0, 0.0, 0.5]  # Focus on robot's workspace
+                print(f"Using default full robot camera view")
+            elif isinstance(camera_id, int) and 0 <= camera_id < model.ncam:
+                viewer_instance.cam.azimuth = model.cam_azimuth[camera_id]
+                viewer_instance.cam.elevation = model.cam_elevation[camera_id]
+                viewer_instance.cam.distance = model.cam_distance[camera_id]
+                print(f"Using camera {camera_id}")
+            else:
+                print(f"Invalid camera ID: {camera_id}")
             
             print("Launched MuJoCo viewer")
         except Exception as e:
@@ -197,16 +290,49 @@ def replay_with_contact(dataset_path, demo_idx=0, render=True, save_video=False,
     print("Starting replay...")
     try:
         for step, action in enumerate(actions):
-            # Apply action
-            # For Panda, typically:
-            # - First 3 values are delta XYZ position
-            # - Next 3 values are delta orientation
-            # - Last 1 value is gripper command (1 for open, -1 for close)
+            # Apply action to the full robot
+            # First 7 dimensions control the arm joints
+            data.ctrl[:7] = action[:7]
             
-            # For now, simplified approach: map the action to actuator controls
-            # This may need adjustment based on the control scheme
-            ctrl_count = min(len(action), model.nu)
-            data.ctrl[:ctrl_count] = action[:ctrl_count]
+            # Last dimension controls the gripper
+            if len(action) > 6:
+                # Map from [-1,1] to [0.0, 0.04], where -1 = closed (0.0) and 1 = open (0.04)
+                finger_pos = (action[6] + 1) * 0.02  # Maps [-1,1] to [0,0.04]
+                data.ctrl[7] = finger_pos
+                
+                # Enhanced gripper debugging
+                if step % 10 == 0 or step == len(actions) - 1:  # Print at regular intervals
+                    gripper_positions = data.qpos[7:9]  # Current position of gripper joints
+                    print(f"Step {step}: Gripper action: {action[6]:.4f}, Mapped to: {finger_pos:.4f}")
+                    print(f"        Gripper positions: {gripper_positions}")
+                    print(f"        Gripper velocity: {data.qvel[7:9]}")
+            
+            # Update cube positions and orientations before stepping the simulation
+            if has_cubes and object_obs is not None and step < len(object_obs):
+                try:
+                    cubeA_pos, cubeA_quat, cubeB_pos, cubeB_quat = parse_object_data(object_obs[step])
+                    
+                    # Update cubeA position and orientation using joint qpos
+                    cube_A_joint_idx = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "cubeA_joint0")
+                    if cube_A_joint_idx != -1:
+                        cube_A_qpos_start = model.jnt_qposadr[cube_A_joint_idx]
+                        data.qpos[cube_A_qpos_start:cube_A_qpos_start+3] = cubeA_pos
+                        data.qpos[cube_A_qpos_start+3:cube_A_qpos_start+7] = cubeA_quat
+                    
+                    # Update cubeB position and orientation using joint qpos
+                    cube_B_joint_idx = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "cubeB_joint0")
+                    if cube_B_joint_idx != -1:
+                        cube_B_qpos_start = model.jnt_qposadr[cube_B_joint_idx]
+                        data.qpos[cube_B_qpos_start:cube_B_qpos_start+3] = cubeB_pos
+                        data.qpos[cube_B_qpos_start+3:cube_B_qpos_start+7] = cubeB_quat
+                    
+                    # Forward position/velocity to update the model state
+                    mujoco.mj_forward(model, data)
+                    
+                    if step % 50 == 0:  # Log less frequently
+                        print(f"Step {step}: Updated cube positions")
+                except Exception as e:
+                    print(f"Warning: Could not update cube positions at step {step}: {e}")
             
             # Step the simulation
             mujoco.mj_step(model, data)
@@ -311,22 +437,34 @@ def replay_with_contact(dataset_path, demo_idx=0, render=True, save_video=False,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, required=True, help="Path to HDF5 dataset")
-    parser.add_argument("--demo", type=int, default=0, help="Index of the demonstration to replay")
-    parser.add_argument("--no-render", action="store_true", help="Disable rendering")
-    parser.add_argument("--save-video", action="store_true", help="Save a video of the replay")
-    parser.add_argument("--model", type=str, help="Path to MuJoCo XML model")
-    parser.add_argument("--output-dir", type=str, help="Directory to save outputs (videos, visualizations, etc.)")
-    parser.add_argument("--camera", type=int, help="Camera ID to use for viewing (0-4 for different camera views)")
+    
+    # Set default paths for dataset and model
+    parser.add_argument("--dataset", type=str, 
+                        default="../datasets/mimicgen/core/stack_d0.hdf5", 
+                        help="Path to HDF5 dataset")
+    parser.add_argument("--demo", type=int, default=0, 
+                        help="Index of the demonstration to replay")
+    parser.add_argument("--render", action="store_true", 
+                        help="Enable interactive visualization")
+    parser.add_argument("--save-video", action="store_true", 
+                        help="Save a video of the replay")
+    parser.add_argument("--model", type=str, 
+                        default="franka_emika_panda/stack_d0_compatible.xml",
+                        help="Path to MuJoCo XML model")
+    parser.add_argument("--output-dir", type=str, 
+                        default="../exps",
+                        help="Directory to save outputs (videos, visualizations, etc.)")
+    parser.add_argument("--camera", type=int, 
+                        help="Camera ID to use for viewing (0-4 for different camera views)")
     parser.add_argument("--playback-speed", type=float, default=0.01, 
                         help="Time in seconds to wait between frames (higher = slower playback)")
     
     args = parser.parse_args()
     
-    replay_with_contact(
+    replay_full_robot(
         dataset_path=args.dataset,
         demo_idx=args.demo,
-        render=not args.no_render,
+        render=args.render,
         save_video=args.save_video,
         model_xml_path=args.model,
         output_dir=args.output_dir,

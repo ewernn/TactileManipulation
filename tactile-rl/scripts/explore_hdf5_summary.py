@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 import argparse
+import matplotlib.pyplot as plt
 
 def explore_hdf5_summary(file_path):
     """Explore the structure of an HDF5 file with summarized output"""
@@ -83,6 +84,58 @@ def explore_hdf5_summary(file_path):
                 
                 print(f"  First {first_obs_key}: Shape {first_obs.shape}, Min {np.min(first_obs)}, Max {np.max(first_obs)}")
                 print(f"  First action: {first_action}")
+                
+                # Add detailed analysis of gripper data
+                print("\nGripper Analysis for Demo 0:")
+                
+                # Analyze gripper actions
+                actions = f['data/demo_0/actions'][:]
+                gripper_actions = actions[:, -1]  # Last dimension assumed to be gripper
+                
+                # Print statistics
+                print(f"  Gripper action range: {gripper_actions.min():.4f} to {gripper_actions.max():.4f}")
+                
+                # Print first few gripper actions
+                print(f"  First 10 gripper actions: {gripper_actions[:10]}")
+                print(f"  Last 10 gripper actions: {gripper_actions[-10:]}")
+                
+                # Count transitions from closed to open and vice versa
+                transitions = sum(1 for i in range(1, len(gripper_actions)) 
+                                if (gripper_actions[i-1] < 0 and gripper_actions[i] > 0) or 
+                                   (gripper_actions[i-1] > 0 and gripper_actions[i] < 0))
+                
+                print(f"  Number of gripper open/close transitions: {transitions}")
+                
+                # Look at gripper positions if available
+                if 'robot0_gripper_qpos' in f['data/demo_0/obs']:
+                    gripper_pos = f['data/demo_0/obs/robot0_gripper_qpos'][:]
+                    print(f"  Gripper position range: {gripper_pos.min()} to {gripper_pos.max()}")
+                    print(f"  Initial gripper position: {gripper_pos[0]}")
+                    print(f"  Final gripper position: {gripper_pos[-1]}")
+                    
+                    # Generate a plot showing gripper actions and positions over time
+                    plt.figure(figsize=(10, 6))
+                    timesteps = np.arange(len(gripper_actions))
+                    
+                    # Plot actions
+                    plt.plot(timesteps, gripper_actions, 'b-', label='Gripper Action')
+                    
+                    # Plot positions if the shape allows
+                    if len(gripper_pos.shape) == 2 and gripper_pos.shape[1] <= 2:
+                        for i in range(gripper_pos.shape[1]):
+                            plt.plot(timesteps, gripper_pos[:, i], 'r--', 
+                                    label=f'Gripper Position {i+1}')
+                    
+                    plt.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+                    plt.xlabel('Timestep')
+                    plt.ylabel('Value')
+                    plt.title('Gripper Actions and Positions Over Time')
+                    plt.legend()
+                    plt.tight_layout()
+                    plt.savefig(f"{file_path.replace('.hdf5', '')}_gripper_analysis.png")
+                    plt.close()
+                    print(f"  Saved gripper analysis plot to: {file_path.replace('.hdf5', '')}_gripper_analysis.png")
+                
         except Exception as e:
             print(f"  Couldn't extract samples: {e}")
 

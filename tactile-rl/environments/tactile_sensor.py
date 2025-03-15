@@ -9,8 +9,10 @@ class TactileSensor:
     Simulates a grid of taxels that can detect normal and tangential forces.
     """
     
-    def __init__(self, model=None, data=None, n_taxels_x=10, n_taxels_y=10, 
-                 finger_pad_size=(0.016, 0.016), noise_level=0.01):
+    def __init__(self, model=None, data=None, n_taxels_x=3, n_taxels_y=4, 
+                 finger_pad_size=(0.016, 0.016), noise_level=0.01,
+                 left_finger_name="left_finger", right_finger_name="right_finger",
+                 collision_geom_prefixes=None):
         """
         Initialize the tactile sensor.
         
@@ -21,11 +23,17 @@ class TactileSensor:
             n_taxels_y: Number of taxels in the y direction
             finger_pad_size: Size of the finger pad in meters (width, height)
             noise_level: Level of noise to add to the readings (fraction of reading)
+            left_finger_name: Name of the left finger body in the model
+            right_finger_name: Name of the right finger body in the model
+            collision_geom_prefixes: List of prefixes for collision geometries to consider
         """
         self.n_taxels_x = n_taxels_x
         self.n_taxels_y = n_taxels_y
         self.pad_width, self.pad_height = finger_pad_size
         self.noise_level = noise_level
+        self.left_finger_name = left_finger_name
+        self.right_finger_name = right_finger_name
+        self.collision_geom_prefixes = collision_geom_prefixes or []
         
         # Finger pad center offsets from finger body center
         # These depend on the specific robot model being used
@@ -57,15 +65,25 @@ class TactileSensor:
         """Find the body IDs for the left and right fingers in the MuJoCo model."""
         finger_ids = {"left": None, "right": None}
         
-        # Search for finger bodies in the model
+        # Search for finger bodies by name
         for i in range(model.nbody):
             body_name = model.body(i).name
             
-            if "finger" in body_name.lower() or "pad" in body_name.lower():
-                if "left" in body_name.lower() or "finger1" in body_name.lower() or "panda_leftfinger" in body_name.lower():
-                    finger_ids["left"] = i
-                elif "right" in body_name.lower() or "finger2" in body_name.lower() or "panda_rightfinger" in body_name.lower():
-                    finger_ids["right"] = i
+            if self.left_finger_name in body_name:
+                finger_ids["left"] = i
+            elif self.right_finger_name in body_name:
+                finger_ids["right"] = i
+        
+        # Fallback to searching by common keywords if specific names not found
+        if finger_ids["left"] is None or finger_ids["right"] is None:
+            for i in range(model.nbody):
+                body_name = model.body(i).name.lower()
+                
+                if "finger" in body_name or "pad" in body_name:
+                    if "left" in body_name or "finger1" in body_name or "panda_leftfinger" in body_name:
+                        finger_ids["left"] = i
+                    elif "right" in body_name or "finger2" in body_name or "panda_rightfinger" in body_name:
+                        finger_ids["right"] = i
         
         print(f"Found finger IDs: {finger_ids}")
         return finger_ids

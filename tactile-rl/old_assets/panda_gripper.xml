@@ -46,6 +46,22 @@
                 </body>
             </body>
         </body>
+        
+        <!-- Add these camera definitions just before the closing </worldbody> tag -->
+        <!-- Front view (faces the gripper opening) - moved back to see more -->
+        <camera name="gripper_front" pos="0 0 0.3" euler="0 0 0" fovy="45"/>
+        
+        <!-- Side view (shows gripper from the side) - moved back to see more -->
+        <camera name="gripper_side" pos="0.3 0 0.05" euler="0 90 0" fovy="45"/>
+        
+        <!-- Top view (looks down at gripper) - fixed position to keep gripper in view -->
+        <camera name="gripper_top" pos="0 0 0.3" euler="90 0 0" fovy="45"/>
+        
+        <!-- Perspective view (angled view) - adjusted to keep gripper in view -->
+        <camera name="gripper_perspective" pos="0.2 0.2 0.2" euler="30 45 0" fovy="45"/>
+        
+        <!-- Finger view - specifically aimed at the finger contact area -->
+        <camera name="finger_view" pos="0.04 0.04 0.1" euler="0 70 45" fovy="30"/>
     </worldbody>
     <sensor>
         <force name="force_ee" site="ft_frame"/>
