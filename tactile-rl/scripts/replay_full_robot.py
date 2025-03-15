@@ -296,16 +296,17 @@ def replay_full_robot(dataset_path, demo_idx=0, render=True, save_video=False, m
             
             # Last dimension controls the gripper
             if len(action) > 6:
-                # Map from [-1,1] to [0.0, 0.04], where -1 = closed (0.0) and 1 = open (0.04)
-                finger_pos = (action[6] + 1) * 0.02  # Maps [-1,1] to [0,0.04]
+                # Binary mapping for gripper: -1 (or negative) = open (0.04), +1 (or positive) = closed (0.0)
+                # This better reflects the binary nature of gripper commands in demonstrations
+                if action[6] < 0:  # Open gripper command (-1.0)
+                    finger_pos = 0.04  # Fully open position
+                else:  # Close gripper command (+1.0)
+                    finger_pos = 0.0  # Fully closed position
+                
                 data.ctrl[7] = finger_pos
                 
-                # Enhanced gripper debugging
-                if step % 10 == 0 or step == len(actions) - 1:  # Print at regular intervals
-                    gripper_positions = data.qpos[7:9]  # Current position of gripper joints
-                    print(f"Step {step}: Gripper action: {action[6]:.4f}, Mapped to: {finger_pos:.4f}")
-                    print(f"        Gripper positions: {gripper_positions}")
-                    print(f"        Gripper velocity: {data.qvel[7:9]}")
+                # Print gripper value from dataset at each step
+                print(f"Step {step}: Gripper action from dataset: {action[6]:.4f}")
             
             # Update cube positions and orientations before stepping the simulation
             if has_cubes and object_obs is not None and step < len(object_obs):
@@ -344,10 +345,10 @@ def replay_full_robot(dataset_path, demo_idx=0, render=True, save_video=False, m
             
             # Check for contacts
             contact_info = tactile_sensor.process_contacts(model, data)
-            if contact_info:
-                print(f"Step {step}: Contact detected!")
-                for contact in contact_info[:5]:  # Show first 5 contacts
-                    print(f"  Body: {contact['body_name']}, Pos: {contact['pos']}, Force: {contact['force_norm']:.3f}")
+            # if contact_info:
+            #     print(f"Step {step}: Contact detected!")
+            #     for contact in contact_info[:5]:  # Show first 5 contacts
+            #         print(f"  Body: {contact['body_name']}, Pos: {contact['pos']}, Force: {contact['force_norm']:.3f}")
             
             # Render if needed
             if render and viewer_instance is not None:
