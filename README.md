@@ -19,6 +19,7 @@ This project showcases how tactile sensing can significantly improve manipulatio
 - **Multi-Modal Learning**: Integration of visual, proprioceptive, and tactile information
 - **Sample Efficient Learning**: Offline reinforcement learning using demonstration data
 - **Comparative Analysis**: Performance metrics with and without tactile feedback
+- **Object Manipulation**: Support for cube stacking tasks with visualization of object interactions
 
 ## Installation
 
@@ -30,8 +31,7 @@ This project showcases how tactile sensing can significantly improve manipulatio
 
 ### Environment Setup
 
-```bash
-# Create a new conda environment
+Create a new conda environment
 conda create -n tactile-rl python=3.8
 conda activate tactile-rl
 
@@ -41,34 +41,49 @@ pip install mujoco
 # Install PyTorch (Apple Silicon version)
 pip install torch torchvision torchaudio
 
-# Install robomimic and dependencies
-pip install robomimic
-
 # Install other dependencies
-pip install numpy gymnasium matplotlib pandas
-```
+pip install numpy h5py matplotlib imageio pandas
+
+### Known Issues and Troubleshooting
+
+#### MuJoCo Rendering
+There are known issues with MuJoCo's interactive rendering on some platforms. If you encounter rendering problems:
+
+1. Try setting the MUJOCO_GL environment variable:
+export MUJOCO_GL=egl  # Try 'egl', 'glfw', or 'osmesa'
+
+2. If interactive viewing doesn't work, use the headless video generation:
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --no-render --save-video --playback-speed 0.1
+
+3. Videos will be saved to the `../exps` directory by default.
 
 ### Dataset Setup
 
-```bash
 # Download RoboMimic dataset (choose one or more tasks)
 python -m robomimic.scripts.download_datasets --tasks can_picking
 python -m robomimic.scripts.download_datasets --tasks lift
 python -m robomimic.scripts.download_datasets --tasks square_insertion
-```
+python -m robomimic.scripts.download_datasets --tasks stack
 
 ## Project Structure
 
-```
 tactile-rl/
 ├── data/                        # Datasets and processed data
 ├── environments/                # Custom MuJoCo environments
-│   └── tactile_gripper.py       # Gripper with tactile sensors
+│   ├── tactile_gripper.py       # Gripper with tactile sensors
+│   └── tactile_sensor.py        # Tactile sensor implementation
+├── franka_emika_panda/          # Robot and environment models
+│   ├── panda.xml                # Original robot model
+│   ├── mjx_panda.xml            # MuJoCo X compatible model
+│   ├── mjx_two_cubes.xml        # Model with two interactive cubes
+│   ├── stack_d0_compatible.xml  # Enhanced model with tactile sensors
+│   └── original_stack_environment.xml # Original environment from dataset
 ├── models/                      # Neural network architectures
 │   ├── policy_network.py        # Policy networks with tactile processing
 │   └── tactile_encoder.py       # Encoder for tactile information
 ├── scripts/                     # Utility scripts
 │   ├── augment_dataset.py       # Add tactile data to demonstrations
+│   ├── replay_full_robot.py     # Replay demonstrations with the full robot
 │   ├── visualize_tactile.py     # Visualize tactile readings
 │   └── extend_shadow_hand.py    # Optional extension to 5-finger hand
 ├── training/                    # Training algorithms
@@ -77,39 +92,39 @@ tactile-rl/
 ├── visualization/               # Visualization tools
 ├── main.py                      # Main training script
 └── evaluate.py                  # Evaluation script
-```
 
 ## Usage
 
-### Data Augmentation
+### Replaying Demonstrations with Tactile Sensing
 
-First, augment the dataset with tactile information:
+# Generate a video of a demonstration with tactile readings
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --playback-speed 0.1 --camera 1
 
-```bash
-python scripts/augment_dataset.py --dataset can_picking --output augmented_can_picking
-```
+# Use the original environment for most accurate replay
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --model franka_emika_panda/original_stack_environment.xml
 
-This replays the demonstrations in simulation and records tactile sensor readings at each timestep.
+# Use the enhanced environment with tactile sensors
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --model franka_emika_panda/stack_d0_compatible.xml
 
-### Training
+# Use a simplified model with just two cubes
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --model franka_emika_panda/mjx_two_cubes.xml 
 
-Train models with and without tactile information:
+# Adjust playback speed for slower motion
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --playback-speed 0.3 --camera 1
 
-```bash
-# Train with tactile
-python main.py --dataset augmented_can_picking --use_tactile True --algorithm cql
+The script will:
+1. Generate a video file in `../exps/replay_demo{N}.mp4`
+2. Save tactile readings to `../exps/tactile_readings_demo{N}.npy`
+3. Create visualization of tactile readings at key frames
+4. Show interactive object manipulation if using the cube models
 
-# Train without tactile (baseline)
-python main.py --dataset augmented_can_picking --use_tactile False --algorithm cql
-```
+### Environment Options
 
-### Evaluation
+This project includes several environment options:
 
-Compare performance between models:
-
-```bash
-python evaluate.py --tactile_model models/tactile_cql.pt --baseline_model models/baseline_cql.pt
-```
+1. **original_stack_environment.xml**: The original environment from the dataset - provides the most accurate replay of demonstrations
+2. **stack_d0_compatible.xml**: Enhanced environment with added tactile sensors and proper cube setup
+3. **mjx_two_cubes.xml**: Simplified environment focused on cube interaction
 
 ## Tactile Sensor Implementation
 
@@ -138,7 +153,7 @@ The model uses a multi-modal architecture:
 
 ## Recommended Tasks
 
-Three RoboMimic tasks are particularly well-suited for demonstrating tactile benefits:
+Four RoboMimic tasks are particularly well-suited for demonstrating tactile benefits:
 
 1. **Can Picking**: Grasping cylindrical objects with curved surfaces
    - Tactile benefit: Surface curvature detection, slip prevention
@@ -148,6 +163,9 @@ Three RoboMimic tasks are particularly well-suited for demonstrating tactile ben
 
 3. **Square Insertion**: Placing square pegs into matching holes
    - Tactile benefit: Contact detection for alignment, force feedback for insertion
+
+4. **Stack**: Stacking cubes on top of each other
+   - Tactile benefit: Precision grip control, contact detection for placement
 
 ## Results
 

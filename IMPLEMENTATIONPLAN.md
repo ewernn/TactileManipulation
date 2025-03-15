@@ -39,21 +39,44 @@
 ## Day 3: Dataset Augmentation
 
 ### Morning: Replay Infrastructure
-- Create framework to replay RoboMimic demonstrations
-- Add hooks to capture contact information
-- Design data format for tactile observations
+- Create framework to replay RoboMimic demonstrations ✅
+- Add hooks to capture contact information ✅
+- Design data format for tactile observations ✅
+- Troubleshoot MuJoCo rendering issues ⚠️
 
 ### Afternoon: Processing Pipeline
-- Implement parallel processing for dataset augmentation
-- Process demonstrations to add tactile information
-- Create augmented HDF5 datasets
+- Implement headless video generation for dataset visualization ✅
+- Process demonstrations to add tactile information ✅
+- Create augmented datasets with tactile readings ✅
+
+### Alternative Approaches (Due to Rendering Issues):
+- Focus on headless processing and video generation rather than interactive visualization
+- Use saved videos for analysis rather than real-time interaction
+- Consider simplified visualization of tactile readings in 2D plots
 
 ### Evening: Validation
 - Verify augmented datasets contain correct information
 - Test loading and sampling from augmented data
 - Fix any alignment or data format issues
 
-## Day 4: Model Architecture
+## Day 4: Object Manipulation Implementation
+
+### Morning: Object Models
+- Create MuJoCo XML model with two cubes ✅
+- Define object properties and dimensions ✅
+- Set up object observation parsing ✅
+
+### Afternoon: Integration with Replay System
+- Update replay script to support object manipulation ✅
+- Implement tracking of object positions and orientations ✅
+- Test with stacking dataset ✅
+
+### Evening: Enhanced Visualization
+- Add camera views focused on object interaction
+- Implement visual debugging for object states
+- Test and refine object manipulation simulation
+
+## Day 5: Model Architecture
 
 ### Morning: Base Model Setup
 - Set up RoboMimic's BC and CQL implementations
@@ -70,7 +93,7 @@
 - Set up logging and visualization for training progress
 - Prepare baseline (no tactile) and experimental setups
 
-## Day 5: Training and Initial Evaluation
+## Day 6: Training and Initial Evaluation
 
 ### Morning: Baseline Training
 - Train baseline models without tactile information
@@ -87,7 +110,7 @@
 - Compare learning curves and initial performance
 - Identify potential issues or improvements
 
-## Day 6: Comprehensive Evaluation
+## Day 7: Comprehensive Evaluation
 
 ### Morning: Task Evaluation
 - Run extensive evaluations across all tasks
@@ -104,7 +127,7 @@
 - Adapt tactile approach to 5-finger model
 - Plan simplified demonstration for 5-finger hand
 
-## Day 7: Documentation and Finalization
+## Day 8: Documentation and Finalization
 
 ### Morning: Result Compilation
 - Compile all results and metrics
