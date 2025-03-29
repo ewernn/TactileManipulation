@@ -57,6 +57,14 @@ mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 -
 
 3. Videos will be saved to the `../exps` directory by default.
 
+#### Robot Movement Issues
+If robot movement appears too fast or too slow compared to object movement:
+
+1. The script will automatically analyze action ranges and suggest an appropriate scaling factor
+2. Try using `--control-mode position` with a lower `--action-scale` value (typically 1.0-5.0)
+3. For accurate timestamps, use `--playback-speed 0.002` to match the simulation time step
+4. Note that object positions are set directly from the dataset while robot movement is physics-based
+
 ### Dataset Setup
 
 # Download RoboMimic dataset (choose one or more tasks)
@@ -98,7 +106,13 @@ tactile-rl/
 ### Replaying Demonstrations with Tactile Sensing
 
 # Generate a video of a demonstration with tactile readings
-mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --playback-speed 0.1 --camera 1
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --playback-speed 0.002 --camera 1
+
+# Use position control mode with appropriate action scaling (recommended)
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --control-mode position --action-scale 3 --playback-speed 0.002
+
+# Use velocity control mode for more responsive movement (may not match original data)
+mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --control-mode velocity --action-scale 10 --playback-speed 0.002
 
 # Use the original environment for most accurate replay
 mjpython -m scripts.replay_full_robot --dataset ../datasets/core/stack_d0.hdf5 --demo 3 --save-video --model franka_emika_panda/original_stack_environment.xml
