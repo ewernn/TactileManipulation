@@ -4,3 +4,7 @@ datasets/
 exps/
 mimicgen/
 videos/
+
+tactile-rl/scripts/__pycache__/
+tactile-rl/scripts/.DS_Store
+.DS_Store

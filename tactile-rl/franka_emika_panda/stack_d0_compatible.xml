@@ -166,17 +166,17 @@
       <body name="link1" pos="0 0 0.333">
         <inertial mass="4.970684" pos="0.003875 0.002081 -0.04762"
           fullinertia="0.70337 0.70661 0.0091170 -0.00013900 0.0067720 0.019169"/>
-        <joint name="joint1"/>
+        <joint name="robot0_joint1"/>
         <geom material="white" mesh="link1" class="visual"/>
         <geom mesh="link1_c" class="collision"/>
         <body name="link2" quat="1 -1 0 0">
           <inertial mass="0.646926" pos="-0.003141 -0.02872 0.003495"
             fullinertia="0.0079620 2.8110e-2 2.5995e-2 -3.925e-3 1.0254e-2 7.04e-4"/>
-          <joint name="joint2" range="-1.7628 1.7628"/>
+          <joint name="robot0_joint2" range="-1.7628 1.7628"/>
           <geom material="white" mesh="link2" class="visual"/>
           <geom mesh="link2_c" class="collision"/>
           <body name="link3" pos="0 -0.316 0" quat="1 1 0 0">
-            <joint name="joint3"/>
+            <joint name="robot0_joint3"/>
             <inertial mass="3.228604" pos="2.7518e-2 3.9252e-2 -6.6502e-2"
               fullinertia="3.7242e-2 3.6155e-2 1.083e-2 -4.761e-3 -1.1396e-2 -1.2805e-2"/>
             <geom mesh="link3_0" material="white" class="visual"/>
@@ -187,7 +187,7 @@
             <body name="link4" pos="0.0825 0 0" quat="1 1 0 0">
               <inertial mass="3.587895" pos="-5.317e-2 1.04419e-1 2.7454e-2"
                 fullinertia="2.5853e-2 1.9552e-2 2.8323e-2 7.796e-3 -1.332e-3 8.641e-3"/>
-              <joint name="joint4" range="-3.0718 -0.0698"/>
+              <joint name="robot0_joint4" range="-3.0718 -0.0698"/>
               <geom mesh="link4_0" material="white" class="visual"/>
               <geom mesh="link4_1" material="white" class="visual"/>
               <geom mesh="link4_2" material="black" class="visual"/>
@@ -196,7 +196,7 @@
               <body name="link5" pos="-0.0825 0.384 0" quat="1 -1 0 0">
                 <inertial mass="1.225946" pos="-1.1953e-2 4.1065e-2 -3.8437e-2"
                   fullinertia="3.5549e-2 2.9474e-2 8.627e-3 -2.117e-3 -4.037e-3 2.29e-4"/>
-                <joint name="joint5"/>
+                <joint name="robot0_joint5"/>
                 <geom mesh="link5_0" material="black" class="visual"/>
                 <geom mesh="link5_1" material="white" class="visual"/>
                 <geom mesh="link5_2" material="white" class="visual"/>
@@ -206,7 +206,7 @@
                 <body name="link6" quat="1 1 0 0">
                   <inertial mass="1.666555" pos="6.0149e-2 -1.4117e-2 -1.0517e-2"
                     fullinertia="1.964e-3 4.354e-3 5.433e-3 1.09e-4 -1.158e-3 3.41e-4"/>
-                  <joint name="joint6" range="-0.0175 3.7525"/>
+                  <joint name="robot0_joint6" range="-0.0175 3.7525"/>
                   <geom mesh="link6_0" material="off_white" class="visual"/>
                   <geom mesh="link6_1" material="white" class="visual"/>
                   <geom mesh="link6_2" material="black" class="visual"/>
@@ -228,7 +228,7 @@
                   <body name="link7" pos="0.088 0 0" quat="1 1 0 0">
                     <inertial mass="7.35522e-01" pos="1.0517e-2 -4.252e-3 6.1597e-2"
                       fullinertia="1.2516e-2 1.0027e-2 4.815e-3 -4.28e-4 -1.196e-3 -7.41e-4"/>
-                    <joint name="joint7"/>
+                    <joint name="robot0_joint7"/>
                     <geom mesh="link7_0" material="white" class="visual"/>
                     <geom mesh="link7_1" material="black" class="visual"/>
                     <geom mesh="link7_2" material="black" class="visual"/>
@@ -255,9 +255,9 @@
                       <site name="ee_y" pos="0 0.1 0" size="0.005 .1" quat="0.707105 0.707108 0 0" rgba="0 1 0 0" type="cylinder" group="1"/>
                       <site name="ee_z" pos="0 0 0.1" size="0.005 .1" quat="1 0 0 0" rgba="0 0 1 0" type="cylinder" group="1"/>
                       
-                      <body name="left_finger" pos="0 0 0.0584">
+                      <body name="gripper0_right_leftfinger" pos="0 0 0.0584">
                         <inertial mass="0.015" pos="0 0 0" diaginertia="2.375e-6 2.375e-6 7.5e-7"/>
-                        <joint name="finger_joint1" class="finger"/>
+                        <joint name="gripper0_right_finger_joint1" class="finger"/>
                         <geom mesh="finger_0" material="off_white" class="visual"/>
                         <geom mesh="finger_1" material="black" class="visual"/>
                         <geom mesh="finger_0" class="collision"/>
@@ -277,9 +277,9 @@
                         <site name="left_taxel_2_2" pos="0.001667 0.006 0.040000" size="0.001" rgba="0 0 1 0.5" type="sphere" />
                         <site name="left_taxel_2_3" pos="0.005000 0.006 0.040000" size="0.001" rgba="0 0 1 0.5" type="sphere" />
                       </body>
-                      <body name="right_finger" pos="0 0 0.0584" quat="0 0 0 1">
+                      <body name="gripper0_right_rightfinger" pos="0 0 0.0584" quat="0 0 0 1">
                         <inertial mass="0.015" pos="0 0 0" diaginertia="2.375e-6 2.375e-6 7.5e-7"/>
-                        <joint name="finger_joint2" class="finger"/>
+                        <joint name="gripper0_right_finger_joint2" class="finger"/>
                         <geom mesh="finger_0" material="off_white" class="visual"/>
                         <geom mesh="finger_1" material="black" class="visual"/>
                         <geom mesh="finger_0" class="collision"/>
@@ -298,7 +298,6 @@
                         <site name="right_taxel_2_1" pos="-0.001667 -0.006 0.040000" size="0.001" rgba="1 0 0 0.5" type="sphere" />
                         <site name="right_taxel_2_2" pos="0.001667 -0.006 0.040000" size="0.001" rgba="1 0 0 0.5" type="sphere" />
                         <site name="right_taxel_2_3" pos="0.005000 -0.006 0.040000" size="0.001" rgba="1 0 0 0.5" type="sphere" />
-
                       </body>
                     </body>
                   </body>
@@ -321,26 +320,26 @@
 
   <tendon>
     <fixed name="split">
-      <joint joint="finger_joint1" coef="0.5"/>
-      <joint joint="finger_joint2" coef="0.5"/>
+      <joint joint="gripper0_right_finger_joint1" coef="0.5"/>
+      <joint joint="gripper0_right_finger_joint2" coef="0.5"/>
     </fixed>
   </tendon>
 
   <equality>
-    <joint joint1="finger_joint1" joint2="finger_joint2" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+    <joint joint1="gripper0_right_finger_joint1" joint2="gripper0_right_finger_joint2" solimp="0.95 0.99 0.001" solref="0.005 1"/>
   </equality>
 
   <!-- IMPORTANT CHANGE: Renamed actuators to match original -->
   <actuator>
-    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="joint1" name="robot0_torq_j1"/>
-    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="joint2" name="robot0_torq_j2"/>
-    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="joint3" name="robot0_torq_j3"/>
-    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="joint4" name="robot0_torq_j4"/>
-    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="joint5" name="robot0_torq_j5"/>
-    <motor ctrllimited="true" ctrlrange="-12.0 12.0" joint="joint6" name="robot0_torq_j6"/>
-    <motor ctrllimited="true" ctrlrange="-12.0 12.0" joint="joint7" name="robot0_torq_j7"/>
-    <position ctrllimited="true" ctrlrange="0.0 0.04" joint="finger_joint1" kp="1000" name="gripper0_right_gripper_finger_joint1" forcelimited="true" forcerange="-20 20"/>
-    <position ctrllimited="true" ctrlrange="-0.04 0.0" joint="finger_joint2" kp="1000" name="gripper0_right_gripper_finger_joint2" forcelimited="true" forcerange="-20 20"/>
+    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="robot0_joint1" name="robot0_torq_j1"/>
+    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="robot0_joint2" name="robot0_torq_j2"/>
+    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="robot0_joint3" name="robot0_torq_j3"/>
+    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="robot0_joint4" name="robot0_torq_j4"/>
+    <motor ctrllimited="true" ctrlrange="-80.0 80.0" joint="robot0_joint5" name="robot0_torq_j5"/>
+    <motor ctrllimited="true" ctrlrange="-12.0 12.0" joint="robot0_joint6" name="robot0_torq_j6"/>
+    <motor ctrllimited="true" ctrlrange="-12.0 12.0" joint="robot0_joint7" name="robot0_torq_j7"/>
+    <position ctrllimited="true" ctrlrange="0.0 0.04" joint="gripper0_right_finger_joint1" kp="1000" name="gripper0_right_gripper_finger_joint1" forcelimited="true" forcerange="-20 20"/>
+    <position ctrllimited="true" ctrlrange="-0.04 0.0" joint="gripper0_right_finger_joint2" kp="1000" name="gripper0_right_gripper_finger_joint2" forcelimited="true" forcerange="-20 20"/>
   </actuator>
 
   <sensor>
