@@ -131,8 +131,9 @@ class SimpleTactileGraspingEnv:
         self.data.ctrl[3] = gripper_pos
         self.data.ctrl[4] = gripper_pos
         
-        # Step simulation
-        mujoco.mj_step(self.model, self.data)
+        # Step simulation multiple times for better physics settling
+        for _ in range(10):
+            mujoco.mj_step(self.model, self.data)
         self.current_step += 1
         
         # Get observation

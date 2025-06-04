@@ -1,0 +1,36 @@
+<mujoco model="franka_emika_panda">
+  <include file="panda.xml"/>
+  
+  <worldbody>
+    <!-- Table very close to robot -->
+    <body name="table" pos="0.35 0 0.35">
+      <geom type="box" size="0.25 0.25 0.35" rgba="0.5 0.3 0.1 1" mass="50"/>
+      <geom type="box" size="0.24 0.24 0.015" pos="0 0 0.36" rgba="0.7 0.5 0.3 1"/>
+    </body>
+    
+    <!-- Blocks much closer to robot base -->
+    <body name="target_block" pos="0.25 0 0.44">
+      <joint name="cube:joint" type="free" damping="0.01"/>
+      <geom name="red_box" size="0.025 0.025 0.025" type="box" rgba="1 0 0 1" mass="0.1" 
+            condim="4" friction="1 0.1 0.002" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1"/>
+      <site name="red_box_site" pos="0 0 0" size="0.025 0.025 0.025" type="box" rgba="1 0 0 0"/>
+    </body>
+    
+    <body name="block2" pos="0.15 0.08 0.44">
+      <joint name="block2:joint" type="free" damping="0.01"/>
+      <geom name="green_box" size="0.025 0.025 0.025" type="box" rgba="0 1 0 1" mass="0.1" 
+            condim="4" friction="1 0.1 0.002" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1"/>
+    </body>
+    
+    <body name="block3" pos="0.15 -0.08 0.44">
+      <joint name="block3:joint" type="free" damping="0.01"/>
+      <geom name="blue_box" size="0.025 0.025 0.025" type="box" rgba="0 0 1 1" mass="0.1" 
+            condim="4" friction="1 0.1 0.002" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1"/>
+    </body>
+    
+    <!-- Cameras -->
+    <camera name="demo_cam" pos="0.8 -0.6 1.2" xyaxes="0.3 0.5 0 -0.4 0.24 0.87"/>
+    <camera name="side_cam" pos="0.8 0.8 0.8" xyaxes="-0.7 0.7 0 -0.5 -0.5 0.7"/>
+    <camera name="wrist_cam" pos="0 0 0.08" mode="fixed" xyaxes="0 1 0 0 0 1"/>
+  </worldbody>
+</mujoco>
