@@ -5,6 +5,47 @@ exps/
 mimicgen/
 videos/
 
-tactile-rl/scripts/__pycache__/
-tactile-rl/scripts/.DS_Store
+# Python
+**/__pycache__/
+**/*.pyc
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+
+# Generated media files
+tactile-rl/scripts/*.mp4
+tactile-rl/scripts/grasp_test_*.png
+tactile-rl/scripts/scene_*.png
+tactile-rl/scripts/debug_*.png
+tactile-rl/scripts/test_*.png
+tactile-rl/scripts/expert_policy_diagnostics/
+tactile-rl/scripts/expert_tuning_*/
+tactile-rl/scripts/*.png
+
+# Generated documentation
+ai_docs/_generated/
+
+# OS files
 .DS_Store
+**/.DS_Store
+*.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temp files
+*.log
+*.tmp
+temp/
+tmp/
